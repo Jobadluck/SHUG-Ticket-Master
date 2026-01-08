@@ -5,6 +5,15 @@ export default defineEventHandler(async (event) => {
     const body = await readBody(event)
     const { personName } = body
     
+    // Verify KV is available
+    if (!process.env.KV_URL && !process.env.REDIS_URL) {
+      console.error('No KV environment variable found')
+      return {
+        error: 'KV database not configured',
+        success: false
+      }
+    }
+    
     // Get current state
     const currentTicketVal = await kv.get('currentTicket')
     const queueData = await kv.get('ticketQueue')
@@ -48,7 +57,7 @@ export default defineEventHandler(async (event) => {
   } catch (error) {
     console.error('Error getting ticket:', error)
     return {
-      error: 'Failed to get ticket',
+      error: `Failed to get ticket: ${error.message}`,
       success: false
     }
   }
