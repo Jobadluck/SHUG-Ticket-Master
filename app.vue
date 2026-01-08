@@ -20,6 +20,7 @@
     <!-- Admin Panel -->
     <div v-if="isAdmin" class="admin-panel">
       <button @click="passTicket" class="pass-ticket-btn">Pass to Next Ticket</button>
+      <button @click="resetTickets" class="reset-btn">Reset All Tickets</button>
       <button @click="logout" class="logout-btn">Logout</button>
     </div>
     <div v-else class="admin-hint">
@@ -73,6 +74,17 @@ const passTicket = () => {
     currentTicket.value++
   } else {
     currentTicket.value = 0
+  }
+}
+
+// Reset all tickets to 0000
+const resetTickets = () => {
+  if (confirm('Are you sure you want to reset all tickets to 0000? This cannot be undone.')) {
+    currentTicket.value = 0
+    ticketCounter.value = 0
+    myTicket.value = null
+    saveState()
+    console.log('🔄 All tickets reset to 0000')
   }
 }
 
@@ -199,6 +211,28 @@ onMounted(() => {
 }
 
 .logout-btn:active {
+  transform: translateY(0);
+}
+
+.reset-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.reset-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+.reset-btn:active {
   transform: translateY(0);
 }
 
