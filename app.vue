@@ -66,6 +66,7 @@ const myTicket = ref(null)
 const isAdmin = ref(false)
 const personName = ref('')
 const ticketQueue = ref([])
+const isLoading = ref(false)
 
 // Mobile detection
 const isMobile = ref(false)
@@ -129,36 +130,50 @@ const handleKeyPress = (event) => {
 }
 
 // Pass ticket to next number
-const passTicket = () => {
+const passTicket = async () => {
   if (ticketQueue.value.length === 0) return
   
-  // Remove current ticket from queue
-  const currentIndex = ticketQueue.value.findIndex(t => t.ticketNumber === currentTicket.value)
-  if (currentIndex !== -1) {
-    ticketQueue.value.splice(currentIndex, 1)
+  isLoading.value = true
+  try {
+    const response = await fetch('/api/tickets/pass', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    
+    const data = await response.json()
+    if (data.success) {
+      currentTicket.value = data.currentTicket
+      ticketQueue.value = data.ticketQueue
+    }
+  } catch (error) {
+    console.error('Error passing ticket:', error)
+  } finally {
+    isLoading.value = false
   }
-  
-  // Set to next ticket in queue or null if empty
-  if (ticketQueue.value.length > 0) {
-    // Set to smallest ticket number in remaining queue
-    const smallest = Math.min(...ticketQueue.value.map(t => t.ticketNumber))
-    currentTicket.value = smallest
-  } else {
-    // No more tickets in queue
-    currentTicket.value = null
-  }
-  
-  saveState()
 }
 
 // Reset all tickets
-const resetTickets = () => {
+const resetTickets = async () => {
   if (confirm('Are you sure you want to reset all tickets? This cannot be undone.')) {
-    currentTicket.value = null
-    myTicket.value = null
-    ticketQueue.value = []
-    saveState()
-    console.log('🔄 All tickets reset')
+    isLoading.value = true
+    try {
+      const response = await fetch('/api/tickets/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const data = await response.json()
+      if (data.success) {
+        currentTicket.value = null
+        myTicket.value = null
+        ticketQueue.value = []
+        console.log('🔄 All tickets reset')
+      }
+    } catch (error) {
+      console.error('Error resetting tickets:', error)
+    } finally {
+      isLoading.value = false
+    }
   }
 }
 
@@ -168,112 +183,66 @@ const logout = () => {
 }
 
 // Get a new ticket
-const getTicket = () => {
+const getTicket = async () => {
   if (!personName.value.trim() && !isAdmin.value) {
     alert('Please enter your name')
     return
   }
   
-  // Calculate next ticket number based on current serving ticket
-  let nextTicketNumber
-  if (currentTicket.value === null) {
-    // If no ticket is being served, start at 0001
-    nextTicketNumber = 1
-  } else {
-    // Get next ticket after current
-    nextTicketNumber = currentTicket.value + 1
-    if (nextTicketNumber > 9999) {
-      nextTicketNumber = 1
-    }
-  }
-  
-  // Add to queue
-  ticketQueue.value.push({
-    person: personName.value.trim() || 'Anonymous',
-    ticketNumber: nextTicketNumber
-  })
-  
-  // If no ticket is currently being served, set it to the smallest in queue
-  if (currentTicket.value === null) {
-    const smallest = Math.min(...ticketQueue.value.map(t => t.ticketNumber))
-    currentTicket.value = smallest
-  }
-  
-  myTicket.value = nextTicketNumber
-  personName.value = ''
-  saveState()
-}
-
-// Load state from localStorage
-const loadState = () => {
-  const now = new Date()
-  const savedDate = localStorage.getItem('ticketDate')
-  const today = now.toISOString().split('T')[0]
-  
-  // Check if it's a new day
-  if (savedDate !== today) {
-    // Reset to new day
-    localStorage.setItem('ticketDate', today)
-    localStorage.setItem('currentTicket', 'null')
-    localStorage.setItem('ticketQueue', '[]')
-    currentTicket.value = null
-    ticketQueue.value = []
-  } else {
-    // Load saved values
-    const saved = localStorage.getItem('currentTicket')
-    const savedQueue = localStorage.getItem('ticketQueue')
+  isLoading.value = true
+  try {
+    const response = await fetch('/api/tickets/get', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ personName: personName.value.trim() || 'Anonymous' })
+    })
     
-    if (saved !== null && saved !== 'null') {
-      currentTicket.value = parseInt(saved)
-    } else {
-      currentTicket.value = null
+    const data = await response.json()
+    if (data.success) {
+      myTicket.value = data.myTicket
+      currentTicket.value = data.currentTicket
+      ticketQueue.value = data.ticketQueue
+      personName.value = ''
     }
-    
-    if (savedQueue !== null) {
-      try {
-        ticketQueue.value = JSON.parse(savedQueue)
-        // If no current ticket but queue has items, set to smallest
-        if (currentTicket.value === null && ticketQueue.value.length > 0) {
-          const smallest = Math.min(...ticketQueue.value.map(t => t.ticketNumber))
-          currentTicket.value = smallest
-        }
-      } catch (e) {
-        ticketQueue.value = []
-      }
-    }
+  } catch (error) {
+    console.error('Error getting ticket:', error)
+    alert('Failed to get ticket. Please try again.')
+  } finally {
+    isLoading.value = false
   }
 }
 
-// Save state to localStorage
-const saveState = () => {
-  localStorage.setItem('currentTicket', currentTicket.value === null ? 'null' : String(currentTicket.value))
-  localStorage.setItem('ticketQueue', JSON.stringify(ticketQueue.value))
+// Load state from Vercel KV
+const loadState = async () => {
+  isLoading.value = true
+  try {
+    const response = await fetch('/api/tickets')
+    const data = await response.json()
+    
+    if (!data.error) {
+      currentTicket.value = data.currentTicket
+      ticketQueue.value = data.ticketQueue
+    }
+  } catch (error) {
+    console.error('Error loading state:', error)
+  } finally {
+    isLoading.value = false
+  }
 }
 
-// Watch for changes and save
-const saveStateOnChange = () => {
-  saveState()
-}
-
-onMounted(() => {
+onMounted(async () => {
   // Initialize state
-  loadState()
+  await loadState()
   detectMobile()
   
   // Add keyboard listener
   window.addEventListener('keydown', handleKeyPress)
   window.addEventListener('resize', detectMobile)
   
-  // Save state when values change
-  const interval = setInterval(() => {
-    saveState()
-  }, 1000)
-  
   // Cleanup
   return () => {
     window.removeEventListener('keydown', handleKeyPress)
     window.removeEventListener('resize', detectMobile)
-    clearInterval(interval)
   }
 })
 </script>
