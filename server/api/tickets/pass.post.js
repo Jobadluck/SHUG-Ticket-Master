@@ -1,24 +1,30 @@
-import { kv } from '@vercel/kv'
+import { createClient } from 'redis'
 
 export default defineEventHandler(async (event) => {
+  let redis
   try {
-    // Verify KV is available
-    if (!process.env.KV_URL && !process.env.REDIS_URL) {
-      console.error('No KV environment variable found')
+    // Verify REDIS_URL is available
+    if (!process.env.REDIS_URL) {
+      console.error('REDIS_URL environment variable not found')
       return {
-        error: 'KV database not configured',
+        error: 'Redis database not configured',
         success: false
       }
     }
 
+    // Connect to Redis
+    redis = createClient({ url: process.env.REDIS_URL })
+    await redis.connect()
+
     // Get current state
-    const currentTicketVal = await kv.get('currentTicket')
-    const queueData = await kv.get('ticketQueue')
+    const currentTicketVal = await redis.get('currentTicket')
+    const queueData = await redis.get('ticketQueue')
     const ticketQueue = queueData ? JSON.parse(queueData) : []
     
-    let currentTicket = currentTicketVal === 'null' || currentTicketVal === null ? null : currentTicketVal
+    let currentTicket = currentTicketVal === 'null' || currentTicketVal === null ? null : parseInt(currentTicketVal)
     
     if (ticketQueue.length === 0) {
+      await redis.quit()
       return {
         success: false,
         error: 'No tickets in queue'
@@ -39,10 +45,11 @@ export default defineEventHandler(async (event) => {
       currentTicket = null
     }
     
-    // Save to KV
-    await kv.set('currentTicket', currentTicket === null ? 'null' : currentTicket)
-    await kv.set('ticketQueue', JSON.stringify(ticketQueue))
+    // Save to Redis
+    await redis.set('currentTicket', currentTicket === null ? 'null' : String(currentTicket))
+    await redis.set('ticketQueue', JSON.stringify(ticketQueue))
     
+    await redis.quit()
     return {
       success: true,
       currentTicket,
@@ -50,6 +57,7 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error) {
     console.error('Error passing ticket:', error)
+    if (redis) await redis.quit().catch(() => {})
     return {
       error: `Failed to pass ticket: ${error.message}`,
       success: false
